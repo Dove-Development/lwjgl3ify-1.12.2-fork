@@ -233,6 +233,7 @@ def main():
         help="An assets directory containing the 1.12 asset index (a Gradle/loom cache or a .minecraft/assets)")
     ap.add_argument("--run-seconds", type=int, default=30, help="How long to keep the game running after Forge loaded")
     ap.add_argument("--timeout", type=int, default=600)
+    ap.add_argument("--extra-mod", action="append", default=[], help="Another mod jar to put in mods/ (repeatable)")
     args = ap.parse_args()
 
     mods = [j for j in glob.glob(os.path.join(ROOT, "build", "libs", "lwjgl3ify-*.jar"))
@@ -248,7 +249,7 @@ def main():
         shutil.rmtree(folder, ignore_errors=True)
     os.makedirs(natives)
     os.makedirs(os.path.join(game, "mods"))
-    for mod in mods + [mixinbooter(libraries)]:
+    for mod in mods + [mixinbooter(libraries)] + args.extra_mod:
         shutil.copy(mod, os.path.join(game, "mods"))
 
     cmd, classpath = prism_command(args, work, game, libraries, natives)
