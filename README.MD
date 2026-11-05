@@ -3,6 +3,33 @@
 Brings LWJGL3 and modern Java versions to Minecraft 1.12.2.
 Bundles [RetroFuturaBootstrap](https://github.com/GTNewHorizons/RetroFuturaBootstrap) as a flexible early load plugin system.
 
+## This fork
+
+Dove-Development's fork of [TwilightFlower/lwjgl3ify](https://github.com/TwilightFlower/lwjgl3ify) (its `master` after
+1.0.1), maintained so Minecraft 1.12.2 can run on Java 25 on **arm64** (Apple Silicon, Windows on ARM, Linux on ARM),
+where Minecraft's own LWJGL 2 has no native libraries. x64 machines don't need it.
+
+Changes from upstream:
+
+- **Java 24/25:** RetroFuturaBootstrap 1.0.7 -> 1.1.1 (handles FML installing a Security Manager, which Java 24
+  removed) and ASM 9.7.1 -> 9.10.1 (reads Java 25 class files). The launch flags drop `-Djava.security.manager=allow`,
+  which Java 24+ refuses to start with, and add `--enable-native-access ALL-UNNAMED`.
+- **Launcher profiles:** the LWJGL 3 libraries in the Prism component and `version.json` are generated from the version
+  the mod is built against (3.3.3, `lwjgl3Version` in `gradle.properties`), with every library's path and hash; the
+  hand-written `version.json` used to list 3.3.2. ARM64 natives are included for all three OSes.
+- **Build:** RetroFuturaGradle 1.4.9 (1.3.x is no longer published) and RetroFuturaBootstrap from GTNH's Maven.
+
+Verified on Windows x64: the built Prism instance on Java 17, 21 and 25 loads Forge with lwjgl3ify and MixinBooter
+(`python tools/run-production-test.py --java <java>`). Not yet verified on arm64 hardware.
+
+### Versions and releases
+
+`modVersion` in `gradle.properties` is this fork's own `MAJOR.MINOR.PATCH` version
+(`python tools/bump-version.py patch|minor|major` bumps it). **Actions > Release > Run workflow** bumps it, commits,
+tags the commit with the version, builds, and publishes a GitHub release with the mod jar, the forgePatches jar,
+`version.json`, the Prism zip and `SHA256SUMS`. Pushing a tag yourself releases that tag. Releases before 1.0.0 are
+pre-releases.
+
 # Usage
 
 Lwjgl3ify depends on MixinBooter (<https://github.com/CleanroomMC/MixinBooter>).

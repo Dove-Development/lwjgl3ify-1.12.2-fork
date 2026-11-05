@@ -1,14 +1,16 @@
 
 minecraft {
     mainLwjglVersion = 3
-    lwjgl3Version = "3.3.3"
+    lwjgl3Version = project.lwjgl3Version
 }
 
 def addGtForTesting = Boolean.parseBoolean(project.getProperties().getOrDefault("withGregtech", "false").toString())
 def addReikaModsForTesting = Boolean.parseBoolean(project.getProperties().getOrDefault("withReikaMods", "false").toString())
 
-def asmVersion = '9.7.1'
-def rfbVersion = '1.0.7'
+// 9.8+ reads Java 25 class files (FML reads the JDK's own classes)
+def asmVersion = '9.10.1'
+// 1.1.x handles Java 24+ removing the Security Manager, which FML installs
+def rfbVersion = '1.1.1'
 // 100% binary compatible, 1 minor source compatibility issue (removed a throws IOException clause)
 def gsonVersion = '2.10.1'
 
@@ -33,7 +35,7 @@ dependencies {
     utilImplementation("com.google.guava:guava:31.1-jre")
 
     hotswapCompileOnly("org.hotswapagent:hotswap-agent-core:1.4.1")
-    hotswapCompileOnly("com.gtnewhorizons.retrofuturabootstrap:RetroFuturaBootstrap:${rfbVersion}")
+    hotswapCompileOnly("com.gtnewhorizons.retrofuturabootstrap:RetroFuturaBootstrap:${rfbVersion}") { transitive = false }
 
     forgePatchesEmbeddedRecompile("org.ow2.asm:asm:${asmVersion}")
     forgePatchesEmbeddedRecompile("org.ow2.asm:asm-commons:${asmVersion}")

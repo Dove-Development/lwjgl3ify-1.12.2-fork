@@ -31,7 +31,7 @@ def addOpens = [
     "java.base/java.time.temporal=ALL-UNNAMED",
     "java.base/java.time.zone=ALL-UNNAMED",
     "java.base/java.time=ALL-UNNAMED",
-    "java.base/java.util.concurrent.atomics=ALL-UNNAMED",
+    "java.base/java.util.concurrent.atomic=ALL-UNNAMED",
     "java.base/java.util.concurrent.locks=ALL-UNNAMED",
     "java.base/java.util.jar=ALL-UNNAMED",
     "java.base/java.util.zip=ALL-UNNAMED",
@@ -52,7 +52,11 @@ def addOpens = [
 def extraJavaArgs = [
     "-Dfile.encoding=UTF-8",
     "-Djava.system.class.loader=com.gtnewhorizons.retrofuturabootstrap.RfbSystemClassLoader",
-    "-Djava.security.manager=allow"
+    // LWJGL loads its natives through JNI, which Java 24+ warns about without this. (No
+    // -Djava.security.manager=allow: Java 24+ refuses to start with it, and RetroFuturaBootstrap 1.1
+    // handles FML installing a Security Manager on every Java version.)
+    "--enable-native-access",
+    "ALL-UNNAMED"
 ]
 
 for (openSpec in addOpens) {
@@ -188,10 +192,79 @@ def forgePatchesJar = tasks.register('forgePatchesJar', Jar) {
     }
 }
 
+// LWJGL 3 for every platform, for the launcher profiles (Prism/MultiMC component, vanilla launcher
+// version.json, which the relauncher and the Dove launcher also read). Generated from the version the mod
+// is built against, so the profiles never ship a different one.
+def lwjgl3Bindings = ["lwjgl", "lwjgl-freetype", "lwjgl-glfw", "lwjgl-jemalloc", "lwjgl-openal", "lwjgl-opengl",
+                      "lwjgl-stb", "lwjgl-tinyfd"]
+// LWJGL natives classifier -> launcher os.name values that allow it (a bare os name only matches x86/x86_64
+// in arch-aware launchers; the arm64 builds also list it for launchers that are not arch-aware)
+def lwjgl3Platforms = [
+    "linux"        : ["linux"],
+    "linux-arm32"  : ["linux-arm32"],
+    "linux-arm64"  : ["linux-arm64"],
+    "macos"        : ["osx"],
+    "macos-arm64"  : ["osx", "osx-arm64"],
+    "windows"      : ["windows"],
+    "windows-arm64": ["windows", "windows-arm64"],
+    "windows-x86"  : ["windows"],
+]
+Configuration allOfLwjgl3 = configurations.create("allOfLwjgl3") {
+    canBeConsumed = false
+    canBeResolved = true
+    transitive = false
+}
+for (binding in lwjgl3Bindings) {
+    dependencies.add("allOfLwjgl3", "org.lwjgl:${binding}:${project.lwjgl3Version}")
+    for (platform in lwjgl3Platforms.keySet()) {
+        dependencies.add("allOfLwjgl3", "org.lwjgl:${binding}:${project.lwjgl3Version}:natives-${platform}")
+    }
+}
+
+def lwjgl3LibsJson = layout.buildDirectory.file("lwjgl3-libs.json").get().asFile
+def makeLwjgl3Json = tasks.register("makeLwjgl3Json") {
+    group = taskGroup
+    description = "Lists LWJGL 3 for every platform in launcher library format"
+    inputs.files(allOfLwjgl3)
+    outputs.file(lwjgl3LibsJson)
+    def lwjglVersion = project.lwjgl3Version.toString()
+    doLast {
+        def entries = []
+        allOfLwjgl3.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+            def id = artifact.moduleVersion.id
+            def classifier = artifact.classifier
+            def file = artifact.file
+            def dashClassifier = classifier ? "-${classifier}" : ""
+            def path = "org/lwjgl/${id.name}/${lwjglVersion}/${id.name}-${lwjglVersion}${dashClassifier}.jar"
+            def entry = [
+                downloads: [artifact: [
+                    path: path,
+                    sha1: file.bytes.digest("SHA-1"),
+                    size: file.length(),
+                    url : "https://repo1.maven.org/maven2/${path}".toString()
+                ]],
+                name     : "org.lwjgl:${id.name}${dashClassifier}:${lwjglVersion}".toString()
+            ]
+            if (classifier) {
+                def platform = classifier.toString().replaceFirst("^natives-", "")
+                def osNames = lwjgl3Platforms[platform]
+                if (osNames == null) {
+                    throw new GradleException("No launcher platform for LWJGL natives ${classifier}")
+                }
+                entry.rules = osNames.collect { [action: "allow", os: [name: it]] }
+            }
+            entries << entry
+        }
+        entries.sort { it.name }
+        lwjgl3LibsJson.parentFile.mkdirs()
+        lwjgl3LibsJson.setText(entries.collect { groovy.json.JsonOutput.toJson(it) }.join("," + System.lineSeparator()), "UTF-8")
+    }
+}
+
 def mmcInstanceFilesZip = tasks.register("mmcInstanceFiles", Zip) {
     group = taskGroup
     description = "Packages the MultiMC patches"
-    dependsOn(forgePatchesJar)
+    dependsOn(forgePatchesJar, makeLwjgl3Json)
     archiveClassifier.set("multimc")
     from(project.file("prism-libraries/"))
     from(forgePatchesJar) {
@@ -202,11 +275,14 @@ def mmcInstanceFilesZip = tasks.register("mmcInstanceFiles", Zip) {
         [
             "mmc-pack.json",
             "patches/me.eigenraven.lwjgl3ify.forgepatches.json",
-            "patches/me.eigenraven.lwjgl3ify.launchargs.json"
+            "patches/me.eigenraven.lwjgl3ify.launchargs.json",
+            "patches/org.lwjgl3.json"
         ]
     ) {
         expand(
             [
+                "lwjglVersion": project.lwjgl3Version,
+                "lwjglDownloadsFile": lwjgl3LibsJson.absolutePath,
                 "version": project . version ,
                 "jvmArgs": extraJavaArgs.stream().map({ '"' + it + '"' }).collect(Collectors.joining(", "))
             ]
@@ -219,6 +295,8 @@ def versionJsonPath = layout.buildDirectory.file("libs/version.json").get().asFi
 def versionJsonFile = tasks.register("versionJson") {
     group = taskGroup
     description = "Generates the vanilla launcher version.json file"
+    dependsOn(makeLwjgl3Json)
+    inputs.file(lwjgl3LibsJson)
     inputs.file("launcher-metadata/version.json")
     inputs.property("version", project.version)
     inputs.property("jvmArgs", extraJavaArgs)
@@ -232,6 +310,7 @@ def versionJsonFile = tasks.register("versionJson") {
                 ["tokens": [
                     "version": project.version,
                     "jvmArgs": extraJavaArgs.stream().map({ '"' + it + '"' }).collect(Collectors.joining(", ")),
+                    "lwjglDownloads": lwjgl3LibsJson.getText("UTF-8"),
                     "time": DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX")
                         .format(OffsetDateTime.now(ZoneOffset.UTC))
                 ]],
