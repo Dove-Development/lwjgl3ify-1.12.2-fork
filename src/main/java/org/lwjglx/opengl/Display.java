@@ -458,6 +458,10 @@ public class Display {
             displayFramebufferWidth = fbw.get(0);
             displayFramebufferHeight = fbh.get(0);
         }
+        // On a HiDPI screen (a Retina Mac) the framebuffer is larger than the size the game asked for.
+        // The game only reads the size again after a resize, so without this it draws into the
+        // bottom-left corner until the window is resized.
+        latestResized = displayFramebufferWidth != mode.getWidth() || displayFramebufferHeight != mode.getHeight();
 
         displayX = (monitorWidth - mode.getWidth()) / 2;
         displayY = (monitorHeight - mode.getHeight()) / 2;
