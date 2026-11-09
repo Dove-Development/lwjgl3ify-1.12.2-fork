@@ -512,6 +512,22 @@ public class Display {
         return displayFocused;
     }
 
+    /**
+     * While the game believes its window is not focused, asks GLFW whether it is. Focus otherwise
+     * only follows GLFW's focus callback, and when one is missed the game keeps its pause screen up
+     * and ignores "Back to Game" until the next one. Only asked while unfocused: with glfw_async on
+     * macOS every GLFW call waits for the main thread.
+     */
+    private static void syncFocus() {
+        if (displayFocused || Window.handle == 0L) {
+            return;
+        }
+        if (glfwGetWindowAttrib(Window.handle, GLFW_FOCUSED) == GLFW_TRUE) {
+            Lwjgl3ify.LOG.info("Window focus was out of date (unfocused instead of focused); corrected");
+            displayFocused = true;
+        }
+    }
+
     public static boolean isVisible() {
         return displayVisible;
     }
@@ -541,6 +557,7 @@ public class Display {
 
     public static void processMessages() {
         glfwPollEvents();
+        syncFocus();
         Keyboard.poll();
         Mouse.poll();
 
