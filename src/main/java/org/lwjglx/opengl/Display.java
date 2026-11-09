@@ -526,6 +526,10 @@ public class Display {
         if (!displayFocused) {
             Lwjgl3ify.LOG.info("Window focus was out of date (unfocused, but got input); corrected");
             displayFocused = true;
+            // Also ask the OS to make it the active window, which held keys and mouse capture need.
+            if (Window.handle != 0L && glfwGetWindowAttrib(Window.handle, GLFW_FOCUSED) != GLFW_TRUE) {
+                glfwFocusWindow(Window.handle);
+            }
         }
     }
 
