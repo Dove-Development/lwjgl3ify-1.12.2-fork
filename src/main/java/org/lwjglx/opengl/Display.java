@@ -211,6 +211,9 @@ public class Display {
 
             @Override
             public void invoke(long window, int key, int scancode, int action, int mods) {
+                if (action == GLFW_PRESS) {
+                    inputReceived();
+                }
                 if (Config.DEBUG_PRINT_KEY_EVENTS) {
                     Lwjgl3ify.LOG.info(
                         "[DEBUG-KEY] key window:{} key:{} ({}) scancode:{} action:{} mods:{} charname:{} naive-char:{}",
@@ -359,6 +362,9 @@ public class Display {
 
             @Override
             public void invoke(long window, int button, int action, int mods) {
+                if (action == GLFW_PRESS) {
+                    inputReceived();
+                }
                 if (Config.DEBUG_PRINT_MOUSE_EVENTS) {
                     Lwjgl3ify.LOG.info(
                         "[DEBUG-MOUSE] button window:{} button:{} action:{} mods:{}",
@@ -510,6 +516,17 @@ public class Display {
 
     public static boolean isActive() {
         return displayFocused;
+    }
+
+    /**
+     * A click or key press in the game window: the player is using it, so it counts as focused even
+     * when no focus callback came (otherwise the game stays paused and "Back to Game" does nothing).
+     */
+    private static void inputReceived() {
+        if (!displayFocused) {
+            Lwjgl3ify.LOG.info("Window focus was out of date (unfocused, but got input); corrected");
+            displayFocused = true;
+        }
     }
 
     /**
