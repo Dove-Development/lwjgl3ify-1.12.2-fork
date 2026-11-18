@@ -107,9 +107,9 @@ jobs:
           fi
           gh release create "${VERSION}" --title "lwjgl3ify for 1.12.2 ${VERSION}" --generate-notes ${FLAGS} release/*
 
-      # The launcher downloads lwjgl3ify from Cloudflare R2 (downloads.doveclient.com), not GitHub:
-      # the release's files under lwjgl3ify/1.12.2/<version>/, then lwjgl3ify/1.12.2/latest.json, which
-      # names the newest release, once all of them are there.
+      # The launcher downloads lwjgl3ify from Cloudflare R2 (downloads.doveclient.com), not GitHub. R2
+      # keeps only the newest release: its files go under lwjgl3ify/1.12.2/<version>/, then
+      # lwjgl3ify/1.12.2/latest.json names it, and every older version's folder is deleted.
       - name: Upload to R2
         shell: bash
         env:
@@ -120,8 +120,8 @@ jobs:
           AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
           R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
         run: |
-          aws s3 cp release/ "s3://dove-releases/lwjgl3ify/1.12.2/${VERSION}/" --recursive \
-            --endpoint-url "$R2_ENDPOINT" --cache-control "public, max-age=31536000, immutable" --no-progress
+          set -euo pipefail
+          aws s3 cp release/ "s3://dove-releases/lwjgl3ify/1.12.2/${VERSION}/" --recursive --endpoint-url "$R2_ENDPOINT" --cache-control "public, max-age=31536000, immutable" --no-progress
           jq -n --arg version "$VERSION" --argjson prerelease "$PRERELEASE" '{version: $version, prerelease: $prerelease}' > latest.json
-          aws s3 cp latest.json "s3://dove-releases/lwjgl3ify/1.12.2/latest.json" \
-            --endpoint-url "$R2_ENDPOINT" --content-type application/json --cache-control no-cache --no-progress
+          aws s3 cp latest.json "s3://dove-releases/lwjgl3ify/1.12.2/latest.json" --endpoint-url "$R2_ENDPOINT" --content-type application/json --cache-control no-cache --no-progress
+          aws s3 rm "s3://dove-releases/lwjgl3ify/1.12.2/" --recursive --exclude "${VERSION}/*" --exclude latest.json --endpoint-url "$R2_ENDPOINT"
