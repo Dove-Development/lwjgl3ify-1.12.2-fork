@@ -106,3 +106,22 @@ jobs:
             FLAGS="--prerelease"
           fi
           gh release create "${VERSION}" --title "lwjgl3ify for 1.12.2 ${VERSION}" --generate-notes ${FLAGS} release/*
+
+      # The launcher downloads lwjgl3ify from Cloudflare R2 (downloads.doveclient.com), not GitHub:
+      # the release's files under lwjgl3ify/1.12.2/<version>/, then lwjgl3ify/1.12.2/latest.json, which
+      # names the newest release, once all of them are there.
+      - name: Upload to R2
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          aws s3 cp release/ "s3://dove-releases/lwjgl3ify/1.12.2/${VERSION}/" --recursive \
+            --endpoint-url "$R2_ENDPOINT" --cache-control "public, max-age=31536000, immutable" --no-progress
+          jq -n --arg version "$VERSION" --argjson prerelease "$PRERELEASE" '{version: $version, prerelease: $prerelease}' > latest.json
+          aws s3 cp latest.json "s3://dove-releases/lwjgl3ify/1.12.2/latest.json" \
+            --endpoint-url "$R2_ENDPOINT" --content-type application/json --cache-control no-cache --no-progress
